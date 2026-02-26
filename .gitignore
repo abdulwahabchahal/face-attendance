@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.db
+.env
+unknown_faces/
+.DS_Store
+.vscode/
