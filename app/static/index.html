@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Face Recognition Attendance System</title>
+    <title>Visiomark</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -247,8 +247,8 @@
     <div class="sidebar-logo">
         <span>👁️</span>
         <div>
-            <div>FaceAttend</div>
-            <div style="font-size:0.7rem;opacity:0.6;font-weight:400">v2.0 PRD</div>
+            <div>Visiomark</div>
+            <div style="font-size:0.7rem;opacity:0.6;font-weight:400">v1.0 PRD</div>
         </div>
     </div>
     <nav class="sidebar-nav">
@@ -590,7 +590,7 @@ function showPage(page) {
     if (page === 'employees') loadEmployees();
     if (page === 'alerts') loadAlerts(false);
     if (page === 'reports') {
-        const today = new Date().toISOString().split('T')[0];
+        const today = getLocalDateString();
         document.getElementById('report-date').value = today;
         loadReport();
     }
@@ -605,7 +605,7 @@ async function refreshStats() {
     try {
         const [statsRes, attRes] = await Promise.all([
             fetch(`${API}/attendance/stats`),
-            fetch(`${API}/attendance?date_filter=${new Date().toISOString().split('T')[0]}`)
+            fetch(`${API}/attendance?date_filter=${getLocalDateString()}`)
         ]);
         const stats = await statsRes.json();
         const records = await attRes.json();
@@ -627,10 +627,25 @@ function getDayName(dateStr) {
     return days[new Date(dateStr).getDay()];
 }
 
+function getLocalDateString(date = new Date()) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 function formatTime12h(datetimeStr) {
     if (!datetimeStr) return '—';
     return new Date(datetimeStr).toLocaleTimeString('en-US', {
         hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+    });
+}
+
+function formatShiftTime(shiftStr) {
+    if (!shiftStr) return '—';
+    const local = new Date(`1970-01-01T${shiftStr}:00`);
+    return local.toLocaleTimeString('en-US', {
+        hour: 'numeric', minute: '2-digit', hour12: true,
     });
 }
 
@@ -738,6 +753,7 @@ function showDetection(data) {
     } else {
         badge.className = 'detection-badge ignored';
         badge.textContent = `👤 ${data.name || 'Unknown'}`;
+        if (data.reason) badge.textContent += ` — ${data.reason}`;
     }
 
     setTimeout(() => { overlay.style.display = 'none'; }, 4000);
@@ -788,6 +804,10 @@ function addActivity(data) {
         icon = '🚪';
         color = '#dbeafe';
         text = `${data.name} checked out`;
+    } else if (data.action === 'ignored' && data.reason) {
+        icon = 'ℹ️';
+        color = '#f8fafc';
+        text = `${data.name || 'Person'} ignored: ${data.reason}`;
     }
 
     // 6. Append the log to the feed
@@ -797,7 +817,7 @@ function addActivity(data) {
         <span style="font-size:1.2rem">${icon}</span>
         <div>
             <div style="font-weight:600">${text}</div>
-            <div style="font-size:0.75rem;color:var(--muted)">${timestampLabel} · Confidence: ${(data.confidence * 100).toFixed(1)}%</div>
+            <div style="font-size:0.75rem;color:var(--muted)">${timestampLabel} · Confidence: ${(data.confidence * 100).toFixed(1)}%${data.reason ? ' · ' + data.reason : ''}</div>
         </div>`;
     
     feed.insertBefore(item, feed.firstChild);
@@ -1012,7 +1032,7 @@ async function loadEmployees() {
                 <td>${e.name}</td>
                 <td>${e.department}</td>
                 <td>${e.role}</td>
-                <td>${e.shift_start} – ${e.shift_end}</td>
+                <td>${formatShiftTime(e.shift_start)} – ${formatShiftTime(e.shift_end)}</td>
                 <td>
                     <button class="btn btn-danger" style="padding:5px 12px;font-size:0.75rem"
                         onclick="deleteEmployee('${e.id}', '${e.name}')">Delete</button>

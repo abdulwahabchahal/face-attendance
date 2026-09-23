@@ -10,30 +10,100 @@ Rules:
   Overtime → check_out > shift_end              → total_hours > standard hours
 """
 
-from datetime import datetime, timedelta
+import re
+from datetime import datetime, timedelta, time
 from typing import Optional
 
+from app.core.config import settings
 
-def apply_status_rule(check_in_time: datetime, shift_start_str: str) -> str:
+
+def parse_shift_time(shift_time_str: str) -> time:
+    """Parse a shift time string into a time object.
+
+    Supported formats:
+    - HH:MM
+    - H:MM AM/PM
+    - HH AM/PM
+    - HPM / HAM
     """
-    Determine attendance status based on check-in time and shift start.
+    if not shift_time_str or not shift_time_str.strip():
+        raise ValueError("Shift time must not be empty.")
+
+    normalized = shift_time_str.strip().lower().replace(".", "")
+    normalized = re.sub(r"\s+", " ", normalized)
+
+    formats = [
+        "%I:%M %p",
+        "%I %p",
+        "%I:%M%p",
+        "%I%p",
+        "%H:%M",
+        "%H%M",
+        "%H",
+    ]
+
+    for fmt in formats:
+        try:
+            return datetime.strptime(normalized, fmt).time()
+        except ValueError:
+            continue
+
+    raise ValueError(f"Invalid shift time format: {shift_time_str}")
+
+
+def parse_shift_datetime(shift_time_str: str, reference_dt: datetime) -> datetime:
+    """Convert a shift time string into a datetime on the given reference date."""
+    shift_time = parse_shift_time(shift_time_str)
+    return reference_dt.replace(
+        hour=shift_time.hour,
+        minute=shift_time.minute,
+        second=0,
+        microsecond=0,
+    )
+
+
+def apply_status_rule(check_in_time: datetime, shift_start_str: str, shift_end_str: str = None) -> str:
+    """
+    Determine attendance status based on check-in time, shift start, and shift end.
 
     Args:
         check_in_time: Actual datetime when employee checked in
-        shift_start_str: Shift start as "HH:MM" string e.g. "09:00"
+        shift_start_str: Shift start as "HH:MM" or "H:MM AM/PM" string
+        shift_end_str: Shift end as "HH:MM" or "H:MM AM/PM" string
 
     Returns:
-        str: 'Present' | 'Late' | 'Half Day'
+        str: 'Present' | 'Late' | 'Half Day' | 'Absent'
     """
-    # Parse shift_start into today's datetime
-    hour, minute = map(int, shift_start_str.split(":"))
-    shift_start_dt = check_in_time.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    shift_start_dt = parse_shift_datetime(shift_start_str, check_in_time)
 
-    # Half Day rule: check-in at or after 11:00 AM
-    if check_in_time.hour >= 11:
+    # Ignore check-ins that are far outside the shift window.
+    if shift_end_str:
+        shift_end_dt = parse_shift_datetime(shift_end_str, check_in_time)
+        if check_in_time >= shift_end_dt:
+            return "Ignored"
+
+    early_window_start = shift_start_dt - timedelta(hours=settings.EARLY_ARRIVAL_TOLERANCE_HOURS)
+    if check_in_time < early_window_start:
+        return "Ignored"
+
+    # Early arrival before shift start is still Present.
+    if check_in_time < shift_start_dt:
+        return "Present"
+
+    # Half Day rule: after the configured half-day hour.
+    half_day_threshold = shift_start_dt.replace(
+        hour=settings.HALF_DAY_HOUR,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    if shift_start_dt.hour >= settings.HALF_DAY_HOUR:
+        half_day_threshold = shift_start_dt + timedelta(hours=4)
+
+    if check_in_time >= half_day_threshold:
         return "Half Day"
 
-    # Late rule: more than 10 minutes after shift start
+    # Late rule: more than 10 minutes after shift start.
     diff_minutes = (check_in_time - shift_start_dt).total_seconds() / 60
     if diff_minutes > 10:
         return "Late"
@@ -65,13 +135,12 @@ def is_overtime(check_out: datetime, shift_end_str: str) -> bool:
 
     Args:
         check_out: Checkout datetime
-        shift_end_str: Shift end as "HH:MM" string e.g. "17:00"
+        shift_end_str: Shift end as "HH:MM" or "H:MM AM/PM" string
 
     Returns:
         bool: True if overtime
     """
-    hour, minute = map(int, shift_end_str.split(":"))
-    shift_end_dt = check_out.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    shift_end_dt = parse_shift_datetime(shift_end_str, check_out)
     return check_out > shift_end_dt
 
 
@@ -82,10 +151,9 @@ def get_overtime_hours(check_out: datetime, shift_end_str: str) -> float:
     Returns:
         float: Overtime hours, 0.0 if not overtime
     """
-    if not is_overtime(check_out, shift_end_str):
+    shift_end_dt = parse_shift_datetime(shift_end_str, check_out)
+    if check_out <= shift_end_dt:
         return 0.0
-    hour, minute = map(int, shift_end_str.split(":"))
-    shift_end_dt = check_out.replace(hour=hour, minute=minute, second=0, microsecond=0)
     delta = check_out - shift_end_dt
     return round(delta.total_seconds() / 3600, 2)
 
@@ -97,8 +165,8 @@ def get_standard_hours(shift_start_str: str, shift_end_str: str) -> float:
     Returns:
         float: Expected hours e.g. 8.0 for 09:00 - 17:00
     """
-    start_h, start_m = map(int, shift_start_str.split(":"))
-    end_h, end_m = map(int, shift_end_str.split(":"))
-    start_minutes = start_h * 60 + start_m
-    end_minutes = end_h * 60 + end_m
+    start_time = parse_shift_time(shift_start_str)
+    end_time = parse_shift_time(shift_end_str)
+    start_minutes = start_time.hour * 60 + start_time.minute
+    end_minutes = end_time.hour * 60 + end_time.minute
     return round((end_minutes - start_minutes) / 60, 2)

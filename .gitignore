@@ -7,3 +7,6 @@ venv/
 unknown_faces/
 .DS_Store
 .vscode/
+.idea/
+*.log
+.pytest_cache/

@@ -1,5 +1,5 @@
 """
-Face Recognition Attendance System — Main FastAPI entry point
+Visiomark — Main FastAPI entry point
 
 Includes APScheduler job that runs every 30 minutes and automatically
 marks absent any employee whose shift has ended with no check-in.
@@ -63,7 +63,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Face Recognition Attendance System",
+    title="Visiomark",
     description="AI-powered employee attendance tracking via facial recognition.",
     version=settings.APP_VERSION,
     lifespan=lifespan,

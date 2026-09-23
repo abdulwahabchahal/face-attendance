@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     DEFAULT_SHIFT_END: str = "17:00"
     LATE_GRACE_MINUTES: int = 10        # minutes after shift start before marking Late
     HALF_DAY_HOUR: int = 11             # hour at or after which check-in = Half Day
+    EARLY_ARRIVAL_TOLERANCE_HOURS: int = 4  # ignore check-ins more than N hours before shift start
 
     # ── Paths ─────────────────────────────────────────────
     UNKNOWN_FACES_DIR: str = "unknown_faces"

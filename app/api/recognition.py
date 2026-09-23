@@ -50,7 +50,7 @@ def _is_duplicate_unknown(embedding: List[float]) -> bool:
     Compares embedding against all cached unknowns from last 2 minutes.
     """
     global _unknown_cache
-    now = datetime.utcnow()
+    now = datetime.now()
     cutoff = now - timedelta(minutes=UNKNOWN_COOLDOWN_MINUTES)
 
     # Remove expired entries
@@ -67,7 +67,7 @@ def _cache_unknown(embedding: List[float]):
     """Add this unknown face embedding to the cache."""
     _unknown_cache.append({
         "embedding": embedding,
-        "last_seen": datetime.utcnow(),
+        "last_seen": datetime.now(),
     })
 
 
@@ -111,6 +111,7 @@ async def recognize_face(
         employee_name = employee.name if employee else employee_id
         result = await process_attendance(db, employee_id=employee_id, confidence=confidence)
         action = result.get("action")
+        reason = result.get("reason")
     else:
         # Only log if this unknown face hasn't been seen in the last 2 minutes
         if not _is_duplicate_unknown(query_vec):
@@ -127,6 +128,7 @@ async def recognize_face(
         confidence=round(confidence, 4),
         status="recognised" if recognised else "unknown",
         action=action,
+        reason=reason if recognised else None,
     )
 
 
@@ -186,6 +188,7 @@ async def recognize_video_frame(
                 employee_name = employee.name if employee else employee_id
                 result = await process_attendance(db, employee_id=employee_id, confidence=confidence)
                 action = result.get("action")
+                reason = result.get("reason")
             else:
                 # Each distinct unknown face gets its own cache entry
                 if not _is_duplicate_unknown(embedding):
@@ -200,6 +203,7 @@ async def recognize_video_frame(
                 confidence=round(confidence, 4),
                 status="recognised" if recognised else "unknown",
                 action=action,
+                reason=reason if recognised else None,
             ))
 
         except Exception as e:

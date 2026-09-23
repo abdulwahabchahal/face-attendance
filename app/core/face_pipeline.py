@@ -11,6 +11,10 @@ All heavy objects are singletons created once at import time.
 
 from __future__ import annotations
 
+# Fix SSL certificate verification on macOS Python 3.12 (Homebrew)
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
+
 import logging
 from functools import lru_cache
 from typing import List, Optional, Tuple
@@ -195,7 +199,7 @@ def save_unknown_snapshot(rgb_image: np.ndarray, face_box, output_dir: str) -> O
         face_crop = rgb_image[y1:y2, x1:x2]
         bgr_crop = cv2.cvtColor(face_crop, cv2.COLOR_RGB2BGR)
 
-        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         # encode face centre into filename for per-region deduplication
         cx = (x1 + x2) // 2
         cy = (y1 + y2) // 2

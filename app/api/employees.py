@@ -15,6 +15,7 @@ from app.core.face_pipeline import augment_and_embed, decode_image
 from app.core.schemas import RegisterResponse, EmployeeOut
 from app.db.crud import create_employee, delete_employee, get_employee, list_employees, store_embedding
 from app.db.database import get_db
+from app.modules.rules import parse_shift_time
 
 router = APIRouter()
 
@@ -48,6 +49,14 @@ async def register_employee(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Provide between 1 and 10 face images.",
         )
+
+    try:
+        parsed_start = parse_shift_time(shift_start)
+        parsed_end = parse_shift_time(shift_end)
+        shift_start = parsed_start.strftime("%H:%M")
+        shift_end = parsed_end.strftime("%H:%M")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
     employee = await create_employee(
         db,

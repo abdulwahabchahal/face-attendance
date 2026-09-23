@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import EmployeeModel, EmbeddingModel, AttendanceModel, UnknownFaceModel
 from app.core.config import settings
+from app.modules.rules import parse_shift_datetime
 
 
 # ── Employees ─────────────────────────────────────────────────────────────────
@@ -103,7 +104,7 @@ async def get_today_record(db: AsyncSession, employee_id: str) -> Optional[Atten
 
 async def is_anti_spam(db: AsyncSession, employee_id: str) -> bool:
     """True if this employee was detected within the last 5 minutes."""
-    window = datetime.utcnow() - timedelta(minutes=5)
+    window = datetime.now() - timedelta(minutes=5)
     result = await db.execute(
         select(AttendanceModel).where(
             AttendanceModel.employee_id == employee_id,
@@ -135,7 +136,7 @@ async def process_attendance(
     from app.modules.rules import apply_status_rule, calculate_total_hours
 
     # Anti-spam: ignore if seen in last 5 minutes
-    window_5min = datetime.utcnow() - timedelta(minutes=5)
+    window_5min = datetime.now() - timedelta(minutes=5)
     today = date.today()
 
     existing = await get_today_record(db, employee_id)
@@ -150,11 +151,14 @@ async def process_attendance(
     shift_start = employee.shift_start if employee else "09:00"
     shift_end = employee.shift_end if employee else "17:00"
 
-    now = datetime.utcnow()
+    now = datetime.now()
 
     if not existing:
         # First detection today → CHECK-IN
-        status = apply_status_rule(now, shift_start)
+        status = apply_status_rule(now, shift_start, shift_end)
+        if status == "Ignored":
+            return {"action": "ignored", "reason": "Check-in outside valid shift window"}
+
         record = AttendanceModel(
             employee_id=employee_id,
             date=today,
@@ -179,8 +183,7 @@ async def process_attendance(
             return {"action": "ignored", "reason": "already checked out today"}
 
         # Parse shift_end to decide if it's time to check out
-        shift_end_hour, shift_end_min = map(int, shift_end.split(":"))
-        shift_end_dt = now.replace(hour=shift_end_hour, minute=shift_end_min, second=0, microsecond=0)
+        shift_end_dt = parse_shift_datetime(shift_end, now)
 
         # If current time is past shift end → CHECK-OUT
         if now >= shift_end_dt:
@@ -229,8 +232,7 @@ async def mark_absent_for_today(db: AsyncSession) -> int:
     employees = await list_employees(db)
     count = 0
     for emp in employees:
-        shift_end_hour, shift_end_min = map(int, emp.shift_end.split(":"))
-        shift_end_dt = now.replace(hour=shift_end_hour, minute=shift_end_min, second=0, microsecond=0)
+        shift_end_dt = parse_shift_datetime(emp.shift_end, now)
         if now < shift_end_dt:
             continue  # shift not over yet for this employee
         record = await get_today_record(db, emp.id)

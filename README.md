@@ -1,4 +1,4 @@
-# Face Recognition Attendance System v2.0
+# Visiomark v2.0
 **PRD-compliant** — Auto check-in/check-out, shift rules, unknown face logging, CSV export
 
 ---

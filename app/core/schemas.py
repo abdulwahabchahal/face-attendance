@@ -40,6 +40,7 @@ class RecognitionResult(BaseModel):
     confidence: float
     status: str = Field(..., description="'recognised' | 'unknown'")
     action: Optional[str] = None        # check_in | check_out | ignored
+    reason: Optional[str] = None
 
 
 class FaceDetection(BaseModel):
@@ -49,6 +50,7 @@ class FaceDetection(BaseModel):
     confidence: float
     status: str
     action: Optional[str] = None
+    reason: Optional[str] = None
 
 
 class VideoRecognitionResult(BaseModel):
